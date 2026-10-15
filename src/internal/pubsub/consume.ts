@@ -11,7 +11,8 @@ export async function declareAndBind(
   exchange: string,
   queueName: string,
   key: string,
-  queueType: SimpleQueueType): Promise<[amqp.Channel, amqp.Replies.AssertQueue]> {
+  queueType: SimpleQueueType,
+  exchangeType: "direct" | "topic" = "direct",): Promise<[amqp.Channel, amqp.Replies.AssertQueue]> {
     
     let queue: amqp.Replies.AssertQueue;
     const channel = await conn.createChannel()
@@ -21,6 +22,8 @@ export async function declareAndBind(
     else {
         queue = await channel.assertQueue(queueName, {durable: false, autoDelete: true, exclusive: true})
     }
+    await channel.assertExchange(exchange, exchangeType, { durable: true })
+    await channel.bindQueue(queue.queue, exchange, key)
     return [channel, queue]
 
 }
@@ -32,13 +35,15 @@ export async function subscribeJSON<T>(
   key: string,
   queueType: SimpleQueueType,
   handler: (data: T) => void,
+   exchangeType: "direct" | "topic" = "direct",
 ): Promise<void> {
-  const [channel, queue] = await declareAndBind(conn, exchange, queueName, key, queueType)
+  const [channel, queue] = await declareAndBind(conn, exchange, queueName, key, queueType, exchangeType)
   function callbackFunction(message: amqp.ConsumeMessage | null)  {
     if (message === null) {
       return 
     }
     const messageJSON = JSON.parse(message.content.toString())
+    console.log("received message:", messageJSON)  // debug
     handler(messageJSON)
     channel.ack(message)
     }

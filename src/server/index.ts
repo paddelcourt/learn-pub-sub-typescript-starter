@@ -14,7 +14,7 @@ async function main() {
   console.log("Connection Succesful!")
   console.log("Starting Peril server...");
   const confirmChannel = await conn.createConfirmChannel()
-  declareAndBind(conn, ExchangePerilTopic, GameLogSlug, `${GameLogSlug}.*`, SimpleQueueType.Durable)
+  await declareAndBind(conn, ExchangePerilTopic, GameLogSlug, `${GameLogSlug}.*`, SimpleQueueType.Durable, "topic")
   let value: PlayingState = {isPaused: true}
   process.on('SIGINT', () => {
       console.log('Program is shutting down');
@@ -29,6 +29,7 @@ async function main() {
     const firstWord = userInput[0]
     if (firstWord === "pause") {
       console.log("pause messaging is being sent")
+      value = { isPaused: true }
       const result = await publishJSON(confirmChannel, ExchangePerilDirect, PauseKey, value) 
     }
     else if (firstWord === "resume") { 

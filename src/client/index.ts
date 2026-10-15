@@ -1,6 +1,6 @@
 import amqp from "amqplib";
 import { publishJSON } from "../internal/pubsub/publish.js";
-import { ExchangePerilDirect, PauseKey} from "../internal/routing/routing.js";
+import { ExchangePerilDirect, ExchangePerilTopic, PauseKey} from "../internal/routing/routing.js";
 import type { PlayingState } from "../internal/gamelogic/gamestate.js";
 import { clientWelcome, commandStatus } from "../internal/gamelogic/gamelogic.js";
 import { declareAndBind, SimpleQueueType } from "../internal/pubsub/consume.js";
@@ -9,7 +9,9 @@ import { commandSpawn } from "../internal/gamelogic/spawn.js";
 import { getInput } from "../internal/gamelogic/gamelogic.js";
 import { commandMove } from "../internal/gamelogic/move.js";
 import { printClientHelp } from "../internal/gamelogic/gamelogic.js";
-
+import { subscribeJSON } from "../internal/pubsub/consume.js";
+import { handlerPause } from "./handlers.js";
+import { handlerMove } from "./handlers.js";
 
 
 async function main() {
@@ -20,9 +22,10 @@ async function main() {
   const confirmChannel = await conn.createConfirmChannel()
   const value: PlayingState = {isPaused: true}
   const clientName = await clientWelcome()
-  declareAndBind(conn, ExchangePerilDirect, `pause.${clientName}`, PauseKey, SimpleQueueType.Transient)
   const result = await publishJSON(confirmChannel, ExchangePerilDirect, PauseKey, value)
   const gameState = new GameState(clientName)
+  await subscribeJSON(conn, ExchangePerilDirect,  `pause.${clientName}`, PauseKey, SimpleQueueType.Transient, handlerPause(gameState))
+  await subscribeJSON(conn, ExchangePerilTopic,  `army_moves.${clientName}`, `army_moves.*`, SimpleQueueType.Transient, handlerMove(gameState), "topic")
   while (true) {
     const words = await getInput()
     if (words.length === 0) continue;
@@ -38,7 +41,9 @@ async function main() {
     }
     else if (words[0] === "move") {
       try {
-      commandMove(gameState, words)
+      const moveResult = commandMove(gameState, words)
+      await publishJSON(confirmChannel, ExchangePerilTopic, `army_moves.${clientName}`, moveResult)
+      console.log("move was successfully published")
     }
     catch (error) {
       console.error(error)
